@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>万能墙-管理员版</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --blue: #4A90D9; --blue-dark: #3A7BC8; --blue-light: #7AB8F5;
+  --blue-bg: #EDF4FC; --blue-pale: #F6F9FD;
+  --white: #FFFFFF; --bg: #F3F5F9;
+  --text: #1A2233; --text2: #5C6B7E; --text3: #A0AAB4;
+  --border: #E4E8EE; --danger: #E74C3C;
+  --shadow: 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.05);
+  --radius: 10px; --radius-lg: 14px; --radius-full: 50px;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--text); font-size: 15px;
+  line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100vh;
+}
+button, input, textarea { font-family: inherit; }
+button { cursor: pointer; border: none; background: none; font-size: inherit; }
+input, textarea { font-size: 15px; outline: none; border: none; }
+
+/* ---- Layout ---- */
+.app { display: flex; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar { display: none; width: 220px; background: var(--white); border-right: 1px solid var(--border); flex-shrink: 0; padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sb-logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.sb-logo-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.sb-logo-text { font-size: 17px; font-weight: 700; color: var(--text); }
+.sb-nav { padding: 0 12px; }
+.sb-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 2px 0; border-radius: var(--radius); font-size: 15px; color: var(--text2); cursor: pointer; width: 100%; text-align: left; transition: all .15s; }
+.sb-item:hover { background: var(--blue-pale); color: var(--blue); }
+.sb-item.active { background: var(--blue-bg); color: var(--blue); font-weight: 600; }
+.sb-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+.sb-publish { margin: 14px 12px; width: calc(100% - 24px); padding: 11px; background: var(--blue); color: white; border-radius: var(--radius); font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s; }
+.sb-publish:hover { background: var(--blue-dark); }
+.sb-download { margin: 6px 12px; width: calc(100% - 24px); padding: 7px; background: none; color: var(--text3); border-radius: var(--radius); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; transition: color .15s; }
+.sb-download:hover { color: var(--blue); }
+
+/* Download Modal */
+.dl-cards { display: flex; flex-direction: column; gap: 10px; }
+.dl-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg); border-radius: var(--radius); cursor: pointer; border: 1.5px solid transparent; transition: all .15s; text-align: left; width: 100%; }
+.dl-card:hover { border-color: var(--blue); background: var(--blue-pale); }
+.dl-card .dl-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--blue-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dl-card .dl-label { font-size: 15px; font-weight: 600; color: var(--text); }
+.dl-card .dl-hint { font-size: 12px; color: var(--text3); }
+
+/* Main */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* Topbar */
+.topbar { display: none; background: var(--white); border-bottom: 1px solid var(--border); padding: 0 24px; height: 54px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+.tb-search { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: var(--radius-full); padding: 0 16px; height: 36px; width: 300px; border: 1.5px solid transparent; transition: all .2s; }
+.tb-search:focus-within { background: var(--white); border-color: var(--blue); }
+.tb-search svg { width: 16px; height: 16px; color: var(--text3); flex-shrink: 0; }
+.tb-search input { flex: 1; background: transparent; font-size: 14px; color: var(--text); }
+.tb-search input::placeholder { color: var(--text3); }
+.tb-user { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: var(--text2); }
+.tb-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+
+/* Mobile header */
+.mh { display: flex; background: var(--white); border-bottom: 1px solid var(--border); height: 46px; align-items: center; padding: 0 16px; position: sticky; top: 0; z-index: 50; }
+.mh-back { font-size: 18px; color: var(--text2); margin-right: 6px; padding: 4px; cursor: pointer; display: none; }
+.mh-title { font-size: 17px; font-weight: 700; color: var(--text); flex: 1; }
+
+/* Content */
+.content { flex: 1; }
+
+/* Page */
+.page { display: none; }
+.page.on { display: block; }
+
+/* Category pills */
+.cats { display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; scrollbar-width: none; background: var(--white); }
+.cats::-webkit-scrollbar { display: none; }
+.cat { flex-shrink: 0; padding: 6px 16px; border-radius: var(--radius-full); font-size: 13px; font-weight: 500; background: var(--bg); color: var(--text2); cursor: pointer; white-space: nowrap; transition: all .15s; }
+.cat.on { background: var(--blue); color: white; font-weight: 600; }
+
+/* Post cards */
+.posts { padding: 10px 16px; }
+.card { background: var(--white); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 10px; box-shadow: var(--shadow); cursor: pointer; border: 1px solid var(--border); transition: box-shadow .15s; }
+.card:hover { box-shadow: var(--shadow-card); }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.card-av { width: 38px; height: 38px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; overflow: hidden; }
+.card-av img { width: 100%; height: 100%; object-fit: cover; }
+.card-meta { flex: 1; min-width: 0; }
+.card-name { font-weight: 600; font-size: 15px; }
+.card-time { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.card-tag { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radius-full); flex-shrink: 0; }
+.card-body { font-size: 15px; line-height: 1.6; margin-bottom: 10px; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card-imgs { display: grid; gap: 3px; margin-bottom: 10px; border-radius: 6px; overflow: hidden; }
+.card-imgs.g1 { grid-template-columns: 1fr; }
+.card-imgs.g2 { grid-template-columns: 1fr 1fr; }
+.card-imgs.g3 { grid-template-columns: 1fr 1fr 1fr; }
+.card-imgs img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.card-foot { display: flex; gap: 16px; padding-top: 10px; border-top: 1px solid var(--border); }
+.card-act { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text2); cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: color .15s; }
+.card-act:hover { color: var(--blue); }
+.card-act.liked { color: var(--blue); font-weight: 600; }
+.card-act svg { width: 16px; height: 16px; }
+.card.pos-rel { position: relative; }
+.card-del { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; background: rgba(231,76,60,0.08); color: var(--danger); display: flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; }
+
+/* Mobile tabs */
+.mtabs { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: var(--white); border-top: 1px solid var(--border); height: 58px; z-index: 100; justify-content: space-around; align-items: center; padding-bottom: env(safe-area-inset-bottom); }
+.mtab { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--text3); cursor: pointer; padding: 4px 10px; }
+.mtab.on { color: var(--blue); font-weight: 600; }
+.mtab svg { width: 23px; height: 23px; }
+.mtab-plus { width: 44px; height: 44px; background: var(--blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-top: -14px; box-shadow: 0 4px 14px rgba(74,144,217,0.35); }
+.mtab-plus svg { width: 24px; height: 24px; color: white; }
+
+/* Publish */
+.pub { padding: 16px; max-width: 640px; margin: 0 auto; }
+.pub-ta { width: 100%; min-height: 180px; border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px; font-size: 15px; color: var(--text); resize: vertical; background: var(--white); font-family: inherit; transition: border .2s; }
+.pub-ta:focus { border-color: var(--blue); }
+.pub-ta::placeholder { color: var(--text3); }
+.pub-imgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.pub-img { aspect-ratio: 1; border-radius: 8px; overflow: hidden; position: relative; background: var(--bg); }
+.pub-img img { width: 100%; height: 100%; object-fit: cover; }
+.pub-img-x { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.45); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; }
+.pub-add { aspect-ratio: 1; border-radius: 8px; border: 2px dashed var(--border); background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text3); cursor: pointer; font-size: 11px; transition: all .2s; }
+.pub-add:hover { border-color: var(--blue); color: var(--blue); }
+.pub-add svg { width: 26px; height: 26px; margin-bottom: 2px; }
+.pub-btn { width: 100%; height: 46px; margin-top: 20px; background: var(--blue); color: white; border-radius: var(--radius); font-size: 16px; font-weight: 600; cursor: pointer; transition: background .15s; }
+.pub-btn:hover { background: var(--blue-dark); }
+.pub-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Detail */
+.detail { max-width: 680px; margin: 0 auto; padding-bottom: 80px; }
+.detail-card { background: var(--white); padding: 18px 16px; }
+.detail-card .card-body { -webkit-line-clamp: unset; overflow: visible; }
+.cmts { background: var(--white); padding: 16px; border-top: 8px solid var(--bg); }
+.cmts-title { font-weight: 600; font-size: 15px; margin-bottom: 16px; }
+.cmt { display: flex; gap: 10px; margin-bottom: 14px; }
+.cmt-av { width: 30px; height: 30px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; overflow: hidden; }
+.cmt-av img { width: 100%; height: 100%; object-fit: cover; }
+.cmt-body { flex: 1; min-width: 0; }
+.cmt-name { font-weight: 600; font-size: 13px; }
+.cmt-text { font-size: 15px; margin-top: 3px; word-break: break-word; }
+.cmt-time { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+.cmt-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--white); border-top: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 8px; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 10px); }
+.cmt-bar input { flex: 1; height: 36px; border: 1.5px solid var(--border); border-radius: var(--radius-full); padding: 0 14px; font-size: 14px; transition: border .2s; }
+.cmt-bar input:focus { border-color: var(--blue); }
+.cmt-send { height: 36px; padding: 0 18px; background: var(--blue); color: white; border-radius: var(--radius-full); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.cmt-send:disabled { opacity: 0.5; }
+
+/* Login */
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--white); padding: 24px; }
+.login-box { width: 340px; max-width: 100%; padding: 36px 28px; background: var(--white); border-radius: var(--radius-lg); text-align: center; }
+.login-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.login-title { font-size: 22px; font-weight: 700; margin-bottom: 2px; }
+.login-desc { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+.login-inp { width: 100%; height: 44px; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 0 14px; font-size: 15px; margin-bottom: 10px; transition: border .2s; }
+.login-inp:focus { border-color: var(--blue); }
+.login-inp::placeholder { color: var(--text3); }
+.login-btn { width: 100%; height: 44px; background: var(--blue); color: white; border-radius: var(--radius); font-size: 15px; font-weight: 600; margin-top: 4px; transition: background .15s; }
+.login-btn:hover { background: var(--blue-dark); }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-skip { margin-top: 14px; font-size: 13px; color: var(--text3); cursor: pointer; }
+.login-skip:hover { color: var(--blue); }
+
+/* Profile */
+.pf { max-width: 480px; margin: 0 auto; padding: 20px 16px; }
+.pf-card { background: var(--white); border-radius: var(--radius-lg); padding: 26px 20px; text-align: center; box-shadow: var(--shadow); margin-bottom: 10px; border: 1px solid var(--border); }
+.pf-av { width: 68px; height: 68px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 28px; overflow: hidden; }
+.pf-av img { width: 100%; height: 100%; object-fit: cover; }
+.pf-name { font-size: 18px; font-weight: 700; }
+.pf-phone { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.pf-bio { font-size: 13px; color: var(--text2); margin-top: 6px; }
+.pf-edit { margin-top: 14px; padding: 7px 20px; background: var(--blue-bg); color: var(--blue); border-radius: var(--radius-full); font-size: 13px; font-weight: 600; cursor: pointer; }
+.pf-menu { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--white); border-radius: var(--radius); margin-bottom: 8px; box-shadow: var(--shadow); cursor: pointer; border: 1px solid var(--border); transition: border .15s; }
+.pf-menu:hover { border-color: var(--blue); }
+.pf-menu-l { display: flex; align-items: center; gap: 10px; }
+.pf-menu-icon { font-size: 17px; }
+.pf-menu-label { font-size: 15px; }
+.pf-out { width: 100%; height: 42px; margin-top: 14px; background: var(--white); color: var(--danger); border: 1.5px solid var(--danger); border-radius: var(--radius); font-size: 15px; font-weight: 500; cursor: pointer; transition: background .15s; }
+.pf-out:hover { background: #FFF5F5; }
+
+/* Modal */
+.mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 300; align-items: center; justify-content: center; }
+.mask.on { display: flex; }
+.modal { background: var(--white); border-radius: var(--radius-lg); padding: 24px; width: 90%; max-width: 340px; }
+.modal h3 { text-align: center; margin-bottom: 6px; font-size: 17px; }
+.modal .sub { text-align: center; font-size: 13px; color: var(--text2); margin-bottom: 16px; }
+.modal-inp { width: 100%; height: 42px; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 0 14px; font-size: 15px; margin-bottom: 10px; }
+.modal-inp:focus { border-color: var(--blue); }
+.modal-tarea { width: 100%; height: 68px; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 15px; margin-bottom: 10px; resize: none; font-family: inherit; }
+.modal-tarea:focus { border-color: var(--blue); }
+.modal-acts { display: flex; gap: 10px; }
+.mbtn { flex: 1; height: 38px; border-radius: var(--radius); font-size: 14px; font-weight: 500; cursor: pointer; }
+.mbtn.cancel { background: var(--bg); color: var(--text2); }
+.mbtn.ok { background: var(--blue); color: white; }
+
+/* Announce Bar */
+.ann-bar { background: linear-gradient(135deg, #FFF7ED, #FFFDF7); border-left: 3px solid #F59E0B; border-radius: 8px; padding: 11px 12px; margin: 10px 16px; font-size: 13px; color: #92400E; line-height: 1.6; display: flex; align-items: flex-start; gap: 8px; box-shadow: var(--shadow); }
+.ann-bar .ann-tag { color: #F59E0B; font-weight: 700; flex-shrink: 0; white-space: nowrap; }
+.ann-bar .ann-close { color: #92400E; opacity: 0.4; cursor: pointer; flex-shrink: 0; padding: 0 2px; font-size: 14px; line-height: 1; }
+.ann-bar .ann-close:hover { opacity: 1; }
+.ann-modal-body { text-align: left; font-size: 14px; line-height: 1.7; color: var(--text); padding: 6px 0 0; }
+.ann-modal-body ul { padding-left: 18px; margin: 10px 0; }
+.ann-modal-body li { margin-bottom: 4px; }
+
+/* Toast */
+.toast { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); background: rgba(26,34,51,0.88); color: white; padding: 10px 20px; border-radius: var(--radius-full); font-size: 13px; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.toast.on { opacity: 1; }
+
+/* Spinner / Empty */
+.spin-w { display: flex; justify-content: center; padding: 48px; }
+.spin { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 52px 20px; color: var(--text3); font-size: 14px; }
+.empty svg { width: 52px; height: 52px; color: var(--border); margin-bottom: 10px; }
+
+/* Responsive */
+@media (max-width: 767px) {
+  .sidebar, .topbar { display: none; }
+  .mh { display: flex; }
+  .mtabs { display: flex; }
+  #pg-feed.on, #pg-myposts.on { padding-bottom: 70px; }
+  .cmt-bar { /* default */ }
+}
+@media (min-width: 768px) {
+  .sidebar { display: block; }
+  .topbar { display: flex; }
+  .mh { display: none; }
+  .mtabs { display: none; }
+  .cmt-bar { left: 220px; padding: 10px 24px; }
+  .posts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 16px 24px; }
+  .posts .card { margin-bottom: 0; }
+  .posts .empty, .posts .spin-w { grid-column: 1 / -1; }
+  .cats { padding: 12px 24px; }
+  .pub { padding: 24px; }
+  .pf { padding: 24px; }
+  #pg-feed.on, #pg-myposts.on { padding-bottom: 0; }
+}
+@media (min-width: 1200px) {
+  .posts { grid-template-columns: repeat(3, 1fr); padding: 20px 32px; gap: 16px; }
+  .cats { padding: 14px 32px; }
+  .pub { max-width: 720px; padding: 32px; }
+  .detail { max-width: 760px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-logo"><div class="sb-logo-icon"><img src="logo.jpg" style="width:100%;height:100%;object-fit:contain;"></div><span class="sb-logo-text">万能墙</span></div>
+    <nav class="sb-nav">
+      <button class="sb-item active" data-pg="feed"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>首页</button>
+      <button class="sb-item" data-pg="profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>我的</button>
+    </nav>
+    <button class="sb-publish" id="sbPublish"><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>发布帖子</button>
+    <button class="sb-publish" id="sbAnnounce" style="background:#F59E0B;"><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>发公告</button>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="tb-search"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.5 6.5 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg><input type="text" id="tbSearch" placeholder="搜索帖子内容..."></div>
+      <div class="tb-user" id="tbUser"><span id="tbName">未登录</span><div class="tb-avatar" id="tbAv">&#128100;</div></div>
+    </div>
+
+    <!-- Mobile Header -->
+    <div class="mh"><button class="mh-back" id="mhBack">&#8592;</button><span class="mh-title" id="mhTitle">万能墙</span></div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Feed -->
+      <div class="page on" id="pg-feed">
+        <div class="cats" id="cats"></div>
+        <div class="ann-bar" id="annBar" style="display:none;">
+          <span class="ann-tag">【公告】</span>
+          <span style="flex:1;">欢迎来到浏阳三中万能墙！请文明发言，禁止违法违规、人身攻击、广告推广及泄露他人隐私。祝你在万能墙玩得开心！</span>
+          <span class="ann-close" id="annClose" title="关闭">&#10005;</span>
+        </div>
+        <div class="posts" id="feedList"></div>
+      </div>
+      <!-- Publish -->
+      <div class="page" id="pg-publish">
+        <div class="pub">
+          <div class="cats" id="pubCats" style="background:transparent; padding:0 0 12px 0;"></div>
+          <textarea class="pub-ta" id="pubTa" placeholder="分享你的故事..."></textarea>
+          <div class="pub-imgs" id="pubImgs"></div>
+          <input type="file" id="imgFile" accept="image/*" multiple hidden>
+          <button class="pub-btn" id="pubBtn">就这样</button>
+        </div>
+      </div>
+      <!-- Detail -->
+      <div class="page" id="pg-detail"><div class="detail" id="detailWrap"></div></div>
+      <!-- Profile -->
+      <div class="page" id="pg-profile"><div class="pf" id="pfWrap"></div></div>
+      <!-- My Posts -->
+      <div class="page" id="pg-myposts"><div class="posts" id="myList" style="padding-top:12px;"></div></div>
+      <!-- Login -->
+      <div class="page" id="pg-login">
+        <div class="login-wrap">
+          <div class="login-box">
+            <div class="login-icon"><img src="logo.jpg" style="width:100%;height:100%;object-fit:contain;"></div>
+            <div class="login-title">万能墙</div>
+            <div class="login-desc">校园匿名社区 &middot; 你的声音值得被听见</div>
+            <input class="login-inp" type="text" id="liID" placeholder="管理员ID">
+            <input class="login-inp" type="password" id="liPw" placeholder="管理员密码">
+            <button class="login-btn" id="liBtn">管理员登录</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile tabs -->
+    <nav class="mtabs" id="mtabs">
+      <div class="mtab on" data-pg="feed"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>首页</span></div>
+      <div class="mtab" data-pg="publish"><div class="mtab-plus"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div></div>
+      <div class="mtab" data-pg="profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>我的</span></div>
+    </nav>
+
+    <!-- Comment bar -->
+    <div class="cmt-bar" id="cmtBar" style="display:none;">
+      <input type="text" id="cmtInput" placeholder="写评论...">
+      <button class="cmt-send" id="cmtSend">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- Login Prompt Modal -->
+<div class="mask" id="loginModal">
+  <div class="modal">
+    <h3>需要登录</h3>
+    <div class="sub">登录后可使用此功能</div>
+    <input class="modal-inp" type="text" id="lmID" placeholder="管理员ID">
+    <input class="modal-inp" type="password" id="lmPw" placeholder="管理员密码" style="margin-bottom:14px;">
+    <div class="modal-acts">
+      <button class="mbtn cancel" id="lmCancel">取消</button>
+      <button class="mbtn ok" id="lmOk">登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- Announcement Modal -->
+<div class="mask" id="annModal2">
+  <div class="modal">
+    <h3>发布公告</h3>
+    <textarea class="modal-tarea" id="annText" placeholder="输入公告内容..."></textarea>
+    <div class="modal-acts">
+      <button class="mbtn cancel" id="annCancel2">取消</button>
+      <button class="mbtn ok" id="annSave">发布</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="mask" id="editModal">
+  <div class="modal">
+    <h3>编辑资料</h3>
+    <div class="sub" style="margin-bottom:12px;"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <div id="emAvPreview" style="width:56px;height:56px;border-radius:50%;background:var(--blue-bg);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;overflow:hidden;flex-shrink:0;"></div>
+      <div>
+        <button class="pf-edit" id="emAvBtn" style="margin:0;">上传头像</button>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">不超过1MB</div>
+      </div>
+    </div>
+    <input type="file" id="emAvFile" accept="image/*" hidden>
+    <input class="modal-inp" id="emName" placeholder="昵称" maxlength="20">
+    <textarea class="modal-tarea" id="emBio" placeholder="简介"></textarea>
+    <div class="modal-acts">
+      <button class="mbtn cancel" id="emCancel">取消</button>
+      <button class="mbtn ok" id="emSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---- SUPABASE ---- */
+const SB_URL = 'https://uadenutoemrnvhsefhtc.supabase.co';
+const SB_KEY = 'sb_publishable_joNnvPBuiNPRNoIcVQyeQg_294792iI';
+let sb=null, sbOK=false;
+try { if(!SB_URL.includes('xxxxx')){ sb=supabase.createClient(SB_URL,SB_KEY); sbOK=true; } } catch(e){ console.error('Supabase init:',e); }
+console.log('Supabase:','sbOK='+sbOK, 'URL='+SB_URL);
+
+/* ---- ADMIN CREDENTIALS (from gly.txt) ---- */
+const GLY_ID = 'LYSZ';
+const GLY_MM = 'liuyangsanzhong1826';
+
+/* ---- STATE ---- */
+let user=null, page='feed', cat='全部', sq='', pcat='吐槽', pimgs=[], did=null, stack=[];
+
+/* ---- LS ---- */
+function L(k){ try{return JSON.parse(localStorage.getItem('ww_'+k));}catch(e){return null;} }
+function S(k,v){ localStorage.setItem('ww_'+k,JSON.stringify(v)); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,9); }
+if(!sbOK) user=L('user');
+
+/* ---- DOM ---- */
+const E=id=>document.getElementById(id);
+
+/* ---- TOAST ---- */
+function toast(m){ let t=E('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._tid); t._tid=setTimeout(()=>t.classList.remove('on'),2000); }
+
+/* ---- UTILS ---- */
+function esc(s){ if(!s)return''; let d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function ago(d){ if(!d)return''; let s=Math.floor((Date.now()-new Date(d).getTime())/1000); if(s<60)return'刚刚'; if(s<3600)return Math.floor(s/60)+'分钟前'; if(s<86400)return Math.floor(s/3600)+'小时前'; if(s<604800)return Math.floor(s/86400)+'天前'; return new Date(d).toLocaleDateString('zh-CN',{month:'short',day:'numeric'}); }
+function b64blob(d){ let a=d.split(','),m=a[0].match(/:(.*?);/)[1],b=atob(a[1]),n=b.length,u=new Uint8Array(n); while(n--)u[n]=b.charCodeAt(n); return new Blob([u],{type:m}); }
+
+/* ---- UPDATE UI ---- */
+function updUI(){
+  let T={feed:'万能墙',publish:'发布帖子',profile:'我的',detail:'帖子详情',myposts:'我的帖子',login:'登录'};
+  let isMob=window.innerWidth<768;
+  E('mhTitle').textContent=T[page]||'万能墙';
+  E('mhBack').style.display=(page==='detail'||page==='myposts')?'block':'none';
+  /* 仅移动端用 JS 控制 mtabs，桌面端由 CSS media query 完全接管（display:none） */
+  if(isMob){ E('mtabs').style.display=(page==='detail'||page==='myposts'||page==='login')?'none':'flex'; }
+  else { E('mtabs').style.display=''; }
+  E('cmtBar').style.display=(page==='detail'&&user)?'flex':'none';
+  /* Sidebar */
+  document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('active'));
+  let si=document.querySelector('.sb-item[data-pg="'+page+'"]'); if(si)si.classList.add('active');
+  if(page==='myposts'){ let pi=document.querySelector('.sb-item[data-pg="profile"]'); if(pi)pi.classList.add('active'); }
+  /* Mobile tabs */
+  document.querySelectorAll('.mtab').forEach(x=>x.classList.remove('on'));
+  let mt=document.querySelector('.mtab[data-pg="'+page+'"]'); if(mt)mt.classList.add('on');
+  /* Topbar */
+  if(user){ E('tbName').textContent=user.nickname||'用户'; E('tbAv').innerHTML=user.avatar?'<img src="'+esc(user.avatar)+'" onerror="this.parentElement.textContent=\''+esc((user.nickname||'用')[0])+'\'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">':esc((user.nickname||'用')[0]); }
+  else { E('tbName').textContent='未登录'; E('tbAv').innerHTML='?'; }
+}
+
+/* ---- NAV ---- */
+function go(p,d){
+  if(p==='publish'&&!user){ showLogin(); return; }
+  if(p==='myposts'&&!user){ showLogin(); return; }
+  if(page!=='feed'&&page!=='publish'&&page!=='profile'&&page!=='login') stack.push(page);
+  page=p;
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  let el=E('pg-'+p); if(el)el.classList.add('on');
+  updUI(); window.scrollTo(0,0);
+  if(p==='feed')ldFeed(); if(p==='profile')rdPf(); if(p==='detail'){did=d;ldDetail();} if(p==='myposts')ldMy();
+}
+function back(){ if(stack.length)go(stack.pop()); else go('feed'); }
+E('mhBack').addEventListener('click',back);
+
+/* ---- LOGIN PROMPT ---- */
+function showLogin(){ E('lmID').value=''; E('lmPw').value=''; E('loginModal').classList.add('on'); }
+E('lmCancel').addEventListener('click',()=>E('loginModal').classList.remove('on'));
+E('loginModal').addEventListener('click',function(e){ if(e.target===this)this.classList.remove('on'); });
+
+E('lmOk').addEventListener('click',function(){
+  let id=E('lmID').value.trim(), pw=E('lmPw').value.trim();
+  if(id!==GLY_ID||pw!==GLY_MM){ toast('ID或密码错误'); return; }
+  user={id:'admin',nickname:'狮山万能墙·管理员',avatar:'touxiang.jpg',phone:GLY_ID};
+  S('user',user);
+  E('loginModal').classList.remove('on'); toast('管理员登录成功'); updUI(); ldFeed(); rdPf();
+});
+
+/* ---- FULL LOGIN PAGE ---- */
+E('liBtn').addEventListener('click',function(){
+  let id=E('liID').value.trim(), pw=E('liPw').value.trim();
+  if(!id||!pw){ toast('请输入ID和密码'); return; }
+  if(id!==GLY_ID||pw!==GLY_MM){ toast('ID或密码错误'); return; }
+  user={id:'admin',nickname:'狮山万能墙·管理员',avatar:'touxiang.jpg',phone:GLY_ID};
+  S('user',user);
+  toast('管理员登录成功'); go('feed');
+});
+E('liPw').addEventListener('keydown',function(e){ if(e.key==='Enter')E('liBtn').click(); });
+E('lmPw').addEventListener('keydown',function(e){ if(e.key==='Enter')E('lmOk').click(); });
+
+/* ---- LOGOUT ---- */
+function logout(){ user=null; S('user',null); go('login'); toast('已退出登录'); }
+
+/* ---- CATEGORY PILLS ---- */
+let catList=['全部','表白','吐槽','求助','二手','失物','其他'];
+function buildCats(el,active,onChange){
+  el.innerHTML=catList.map(c=>'<span class="cat'+(c===active?' on':'')+'" data-c="'+c+'">'+c+'</span>').join('');
+  el.querySelectorAll('.cat').forEach(s=>{ s.addEventListener('click',function(){ el.querySelectorAll('.cat').forEach(x=>x.classList.remove('on')); this.classList.add('on'); onChange(this.dataset.c); }); });
+}
+buildCats(E('cats'),cat,c=>{cat=c;ldFeed();});
+buildCats(E('pubCats'),pcat,c=>{pcat=c;});
+
+/* ---- SEARCH ---- */
+E('tbSearch').addEventListener('input',function(){ sq=this.value.trim().toLowerCase(); ldFeed(); });
+
+/* ---- FEED ---- */
+async function ldFeed(){
+  let g=E('feedList'); g.innerHTML='<div class="spin-w"><div class="spin"></div></div>';
+  let ps=[];
+  if(sbOK){
+    let q=sb.from('posts').select('*,users!inner(nickname,avatar)').order('created_at',{ascending:false});
+    if(cat!=='全部')q=q.eq('category',cat); if(sq)q=q.ilike('content','%'+sq+'%');
+    let r=await q; if(r.error){ g.innerHTML='<div class="empty"><p>加载失败</p></div>'; return; } ps=r.data||[];
+  } else {
+    ps=(L('posts')||[]).filter(p=>{ if(cat!=='全部'&&p.category!==cat)return false; if(sq&&!p.content.toLowerCase().includes(sq))return false; return true; }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  }
+  renderCards(g,ps,false);
+}
+
+function renderCards(g,ps,isM){
+  if(!ps.length){ g.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.96.76 1.58V19z"/></svg><p>'+(isM?'还没有发布过帖子':'还没有帖子，快来发布第一条吧')+'</p></div>'; return; }
+  // Sort: pinned first, then by time
+  let sp=[...ps]; sp.sort((a,b)=>{
+    let aPin=(a.pinned?1:0), bPin=(b.pinned?1:0);
+    if(aPin!==bPin)return bPin-aPin;
+    return new Date(b.created_at)-new Date(a.created_at);
+  });
+  let isAdmin=user&&user.id==='admin';
+  let cc={表白:'#E74C3C',吐槽:'#F39C12',求助:'#27AE60',二手:'#3498DB',失物:'#9B59B6',其他:'#7F8C8D'};
+  let h=sp.map(p=>{
+    let u=p.users||{}, nn=u.nickname||p.user_nickname||'匿名', av=u.avatar||p.user_avatar||'', c=cc[p.category]||'#4A90D9';
+    let imgs=p.images||[], ic=imgs.length===1?'g1':imgs.length===2?'g2':'g3';
+    let ih=''; if(imgs.length){ ih='<div class="card-imgs '+ic+'">'+imgs.slice(0,3).map(x=>'<img src="'+esc(x)+'" loading="lazy" onerror="this.style.display=\'none\'">').join('')+'</div>'; }
+    let pinnedTag=p.pinned?'<span style="position:absolute;top:8px;left:8px;background:#F59E0B;color:#fff;font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;">置顶</span>':'';
+    let adminBtns='';
+    if(isAdmin){
+      let pinLabel=p.pinned?'取消置顶':'置顶';
+      adminBtns='<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;">'+
+        '<button class="card-act adm-pin" data-pid="'+esc(p.id)+'" style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(245,158,11,0.1);color:#F59E0B;">'+pinLabel+'</button>'+
+        '<button class="card-act adm-del" data-pid="'+esc(p.id)+'" style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(231,76,60,0.08);color:var(--danger);">删除</button>'+
+        '</div>';
+    }
+    return '<div class="card'+(isM?' pos-rel':'')+'" data-pid="'+esc(p.id)+'" style="position:relative;">'+
+      pinnedTag+adminBtns+
+      (isM&&!isAdmin?'<button class="card-del" data-pid="'+esc(p.id)+'">&#10005;</button>':'')+
+      '<div class="card-head"><div class="card-av">'+(av?'<img src="'+esc(av)+'" onerror="this.innerHTML=\''+esc(nn[0]||'?')+'\'">':esc(nn[0]||'?'))+'</div>'+
+      '<div class="card-meta"><div class="card-name">'+esc(nn)+'</div><div class="card-time">'+ago(p.created_at)+'</div></div>'+
+      '<span class="card-tag" style="background:'+c+'18;color:'+c+'">'+esc(p.category)+'</span></div>'+
+      '<div class="card-body">'+esc(p.content)+'</div>'+ih+
+      '<div class="card-foot">'+
+      '<button class="card-act like-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>'+(p.like_count||0)+'</span></button>'+
+      '<button class="card-act cmt-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM18 14H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg><span>'+(p.comment_count||0)+'</span></button>'+
+      '</div></div>';
+  }).join('');
+  g.innerHTML=h;
+  /* bind */
+  g.querySelectorAll('.card').forEach(c=>{ let pid=c.dataset.pid;
+    c.addEventListener('click',function(e){ if(e.target.closest('.card-del')||e.target.closest('.like-btn')||e.target.closest('.cmt-btn')||e.target.closest('.adm-pin')||e.target.closest('.adm-del'))return; go('detail',pid); });
+  });
+  g.querySelectorAll('.card-del').forEach(b=>{ b.addEventListener('click',function(e){e.stopPropagation(); delPost(this.closest('.card').dataset.pid);}); });
+  g.querySelectorAll('.adm-del').forEach(b=>{ b.addEventListener('click',function(e){e.stopPropagation(); adminDelPost(this.closest('.card').dataset.pid);}); });
+  g.querySelectorAll('.adm-pin').forEach(b=>{ b.addEventListener('click',function(e){e.stopPropagation(); togglePin(this.closest('.card').dataset.pid,this);}); });
+  g.querySelectorAll('.like-btn').forEach(b=>{ b.addEventListener('click',function(e){e.stopPropagation(); if(!user){showLogin();return;} toggleLike(this.closest('.card').dataset.pid,this);}); });
+  g.querySelectorAll('.cmt-btn').forEach(b=>{ b.addEventListener('click',function(e){e.stopPropagation(); go('detail',this.closest('.card').dataset.pid);}); });
+  syncLikes();
+}
+
+async function togglePin(pid,btn){
+  if(!user||user.id!=='admin')return;
+  let ps=L('posts')||[];
+  if(sbOK){ let r=await sb.from('posts').select('*').eq('id',pid).single(); if(r.data){ let p=r.data; await sb.from('posts').update({pinned:!p.pinned}).eq('id',pid); } }
+  let idx=ps.findIndex(p=>p.id===pid);
+  if(idx>=0){ ps[idx].pinned=!ps[idx].pinned; S('posts',ps); }
+  btn.textContent=ps[idx]&&ps[idx].pinned?'取消置顶':'置顶';
+  toast(ps[idx]&&ps[idx].pinned?'已置顶':'已取消置顶');
+  ldFeed();
+}
+
+async function adminDelPost(pid){
+  if(!user||user.id!=='admin')return;
+  if(!confirm('管理员确认删除这条帖子？'))return;
+  try {
+    if(sbOK){ await sb.from('comments').delete().eq('post_id',pid); await sb.from('likes').delete().eq('post_id',pid); await sb.from('posts').delete().eq('id',pid); }
+    else { let ps=(L('posts')||[]).filter(p=>p.id!==pid); S('posts',ps); S('comments',(L('comments')||[]).filter(c=>c.post_id!==pid)); S('likes',(L('likes')||[]).filter(l=>l.post_id!==pid)); }
+    toast('帖子已删除'); ldFeed();
+  } catch(e){ toast('删除失败'); }
+}
+
+async function syncLikes(){
+  if(!user)return;
+  document.querySelectorAll('.card[data-pid]').forEach(async c=>{
+    let pid=c.dataset.pid, liked=false;
+    if(sbOK){ let r=await sb.from('likes').select('id').eq('post_id',pid).eq('user_id',user.id).limit(1); liked=r.data&&r.data.length; }
+    else { liked=(L('likes')||[]).some(l=>l.post_id===pid&&l.user_id===user.id); }
+    let b=c.querySelector('.like-btn'); if(b&&liked)b.classList.add('liked');
+  });
+}
+
+/* ---- LIKE ---- */
+async function toggleLike(pid,btn){
+  if(!user){ showLogin(); return; }
+  let liked=btn.classList.contains('liked'), sp=btn.querySelector('span'), cnt=parseInt(sp.textContent)||0;
+  if(liked){ btn.classList.remove('liked'); sp.textContent=Math.max(0,cnt-1); }
+  else { btn.classList.add('liked'); sp.textContent=cnt+1; }
+  try {
+    if(sbOK){ if(liked)await sb.from('likes').delete().eq('post_id',pid).eq('user_id',user.id); else await sb.from('likes').insert([{post_id:pid,user_id:user.id}]); }
+    else { let ls=L('likes')||[]; if(liked)ls=ls.filter(l=>!(l.post_id===pid&&l.user_id===user.id)); else ls.push({id:uid(),post_id:pid,user_id:user.id,created_at:new Date().toISOString()}); S('likes',ls); }
+  } catch(e){ if(liked){ btn.classList.add('liked'); sp.textContent=cnt; } else { btn.classList.remove('liked'); sp.textContent=cnt; } }
+}
+
+/* ---- DETAIL ---- */
+async function ldDetail(){
+  E('detailWrap').innerHTML='<div class="spin-w"><div class="spin"></div></div>';
+  let post=null;
+  if(sbOK){ let r=await sb.from('posts').select('*,users!inner(nickname,avatar)').eq('id',did).single(); if(r.error){ E('detailWrap').innerHTML='<div class="empty"><p>帖子不存在</p></div>'; return; } post=r.data; }
+  else { post=(L('posts')||[]).find(p=>p.id===did); if(!post){ E('detailWrap').innerHTML='<div class="empty"><p>帖子不存在</p></div>'; return; } }
+  let u=post.users||{}, nn=u.nickname||post.user_nickname||'匿名', av=u.avatar||post.user_avatar||'', ad=esc((nn||'匿')[0]);
+  let cc={表白:'#E74C3C',吐槽:'#F39C12',求助:'#27AE60',二手:'#3498DB',失物:'#9B59B6',其他:'#7F8C8D'}, c=cc[post.category]||'#4A90D9';
+  let imgs=post.images||[], ic=imgs.length===1?'g1':imgs.length===2?'g2':'g3';
+  let ih=''; if(imgs.length){ ih='<div class="card-imgs '+ic+'">'+imgs.map(x=>'<img src="'+esc(x)+'" loading="lazy" onclick="window.open(\''+esc(x)+'\')" style="cursor:pointer">').join('')+'</div>'; }
+  let lc=0; if(sbOK){ let r=await sb.from('likes').select('*',{count:'exact',head:true}).eq('post_id',did); lc=r.count||0; } else { lc=(L('likes')||[]).filter(l=>l.post_id===did).length; }
+  let cs=[]; if(sbOK){ let r=await sb.from('comments').select('*,users!inner(nickname,avatar)').eq('post_id',did).order('created_at',{ascending:true}); cs=r.data||[]; } else { cs=(L('comments')||[]).filter(c=>c.post_id===did).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)); }
+  let ch=cs.map(c=>{ let cu=c.users||{}, cn=cu.nickname||'匿名'; return '<div class="cmt"><div class="cmt-av">'+(cu.avatar?'<img src="'+esc(cu.avatar)+'" onerror="this.innerHTML=\''+esc(cn[0]||'?')+'\'">':esc(cn[0]||'?'))+'</div><div class="cmt-body"><div class="cmt-name">'+esc(cn)+'</div><div class="cmt-text">'+esc(c.content)+'</div><div class="cmt-time">'+ago(c.created_at)+'</div></div></div>'; }).join('');
+  E('detailWrap').innerHTML=
+    '<div class="detail-card"><div class="card-head"><div class="card-av">'+(av?'<img src="'+esc(av)+'" onerror="this.innerHTML=\''+ad+'\'">':ad)+'</div><div class="card-meta"><div class="card-name">'+esc(nn)+'</div><div class="card-time">'+ago(post.created_at)+'</div></div><span class="card-tag" style="background:'+c+'18;color:'+c+'">'+esc(post.category)+'</span></div><div class="card-body">'+esc(post.content)+'</div>'+ih+'<div class="card-foot"><button class="card-act like-btn" id="detLike"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>'+lc+'</span></button><span class="card-act"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM18 14H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg><span>'+cs.length+'</span></span></div></div><div class="cmts"><div class="cmts-title">评论 ('+cs.length+')</div>'+ch+(ch?'':'<p style="color:var(--text3);text-align:center;padding:20px 0;font-size:13px;">还没有评论，来说两句吧</p>')+'</div>';
+  /* bind detail like */
+  let dl=E('detLike'); if(dl)dl.addEventListener('click',function(){ if(!user){showLogin();return;} toggleLike(did,this); });
+  /* check liked */
+  if(user){ let liked=false; if(sbOK){ let r=await sb.from('likes').select('id').eq('post_id',did).eq('user_id',user.id).limit(1); liked=r.data&&r.data.length; } else { liked=(L('likes')||[]).some(l=>l.post_id===did&&l.user_id===user.id); } if(liked){ let b=E('detLike'); if(b)b.classList.add('liked'); } }
+}
+
+/* ---- COMMENT ---- */
+E('cmtSend').addEventListener('click',async function(){
+  if(!user){ showLogin(); return; }
+  let txt=E('cmtInput').value.trim(); if(!txt)return;
+  E('cmtSend').disabled=true;
+  try {
+    if(sbOK){ let r=await sb.from('comments').insert([{post_id:did,user_id:user.id,content:txt}]); if(r.error)throw r.error; }
+    else { let cs=L('comments')||[]; cs.push({id:uid(),post_id:did,user_id:user.id,user_nickname:user.nickname,user_avatar:user.avatar,content:txt,created_at:new Date().toISOString()}); S('comments',cs); }
+    E('cmtInput').value=''; await ldDetail();
+  } catch(e){ toast('评论失败: ' + (e.message||e)); }
+  finally { E('cmtSend').disabled=false; }
+});
+E('cmtInput').addEventListener('keydown',function(e){ if(e.key==='Enter')E('cmtSend').click(); });
+
+/* ---- PUBLISH ---- */
+E('imgFile').addEventListener('change',function(e){
+  Array.from(e.target.files).forEach(f=>{ if(pimgs.length>=9){toast('最多9张');return;} if(f.size>1048576){toast('图片不能超过1MB，请到 docsmall.com/image-compress 压缩后重试');return;} let r=new FileReader(); r.onload=ev=>{pimgs.push(ev.target.result);rdPimgs();}; r.readAsDataURL(f); });
+  e.target.value='';
+});
+function rdPimgs(){
+  let h=pimgs.map((img,i)=>'<div class="pub-img"><img src="'+img+'"><div class="pub-img-x" data-i="'+i+'">&#10005;</div></div>').join('');
+  if(pimgs.length<9)h+='<div class="pub-add" id="pubAddBtn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><span>'+(pimgs.length===0?'添加图片':pimgs.length+'/9')+'</span></div>';
+  E('pubImgs').innerHTML=h;
+  E('pubImgs').querySelectorAll('.pub-img-x').forEach(x=>{ x.addEventListener('click',function(){ pimgs.splice(parseInt(this.dataset.i),1); rdPimgs(); }); });
+  let a=E('pubAddBtn'); if(a)a.addEventListener('click',()=>E('imgFile').click());
+}
+E('pubBtn').addEventListener('click',async function(){
+  if(!user){ showLogin(); return; }
+  let txt=E('pubTa').value.trim(); if(!txt){ toast('请输入内容'); return; }
+  E('pubBtn').disabled=true; E('pubBtn').textContent='发布中...';
+  try {
+    let urls=pimgs;
+    if(sbOK&&pimgs.length){ urls=[]; for(let i=0;i<pimgs.length;i++){ let b=pimgs[i]; if(b.startsWith('data:')){ let fn=user.id+'/'+Date.now()+'_'+i+'.jpg',blob=b64blob(b); let ur=await sb.storage.from('post-images').upload(fn,blob,{contentType:'image/jpeg',upsert:true}); if(ur.error){urls.push(b);} else { let pd=sb.storage.from('post-images').getPublicUrl(fn); urls.push(pd.data.publicUrl); } } else urls.push(b); } }
+    if(sbOK){ let r=await sb.from('posts').insert([{user_id:user.id,category:pcat,content:txt,images:urls}]); if(r.error)throw r.error; }
+    else { let ps=L('posts')||[]; ps.push({id:uid(),user_id:user.id,user_nickname:user.nickname,user_avatar:user.avatar,category:pcat,content:txt,images:urls,created_at:new Date().toISOString()}); S('posts',ps); }
+    E('pubTa').value=''; pimgs=[]; rdPimgs(); toast('发布成功'); go('feed');
+  } catch(e){ toast('发布失败: ' + (e.message||e)); console.error(e); }
+  finally { E('pubBtn').disabled=false; E('pubBtn').textContent='就这样'; }
+});
+
+/* ---- PROFILE ---- */
+function rdPf(){
+  if(!user){ E('pfWrap').innerHTML='<div class="pf-card"><div class="pf-av" style="font-size:28px;font-weight:700;color:var(--blue);">?</div><p style="color:var(--text2);margin-top:6px;">未登录</p><button class="pf-edit" id="pfLogin">管理员登录</button></div>'; E('pfLogin').addEventListener('click',()=>go('login')); return; }
+  let isAdmin=user.id==='admin';
+  E('pfWrap').innerHTML=
+    '<div class="pf-card"><div class="pf-av">'+(user.avatar?'<img src="'+esc(user.avatar)+'" onerror="this.innerHTML=\''+esc((user.nickname||'?')[0])+'\'">':esc((user.nickname||'?')[0]))+'</div><div class="pf-name">'+esc(user.nickname||'未设置')+'</div><div class="pf-phone">'+esc(user.phone||'')+'</div><div class="pf-bio">'+esc(user.bio||(isAdmin?'管理员账户':'这个人很懒，什么都没写...'))+'</div>'+
+    (isAdmin?'<button class="pf-edit" id="pfAnnBtn" style="margin-right:8px;">发公告</button>':'<button class="pf-edit" id="pfEditBtn">编辑资料</button>')+
+    '</div>'+
+    '<div class="pf-menu" id="pfMyPosts"><div class="pf-menu-l"><span class="pf-menu-icon">&#128203;</span><span class="pf-menu-label">我的帖子</span></div><span style="color:var(--text3);">&#8250;</span></div><button class="pf-out" id="pfLogout">退出登录</button>';
+  if(isAdmin){ E('pfAnnBtn').addEventListener('click',()=>{E('annText').value=L('announce_content')||'';E('annModal2').classList.add('on');}); }
+  else { if(E('pfEditBtn'))E('pfEditBtn').addEventListener('click',openEdit); }
+  E('pfMyPosts').addEventListener('click',()=>go('myposts')); E('pfLogout').addEventListener('click',logout);
+}
+
+/* ---- EDIT PROFILE ---- */
+let newAvatar=null;
+function openEdit(){ E('emName').value=user.nickname||''; E('emBio').value=user.bio||''; newAvatar=user.avatar||null; updateEmAv(); E('editModal').classList.add('on'); }
+function updateEmAv(){ let av=E('emAvPreview'), ch=esc((user.nickname||'?')[0]); if(newAvatar){ av.innerHTML='<img src="'+esc(newAvatar)+'" style="width:100%;height:100%;object-fit:cover;" onerror="av.textContent=\''+ch+'\'">'; } else { av.innerHTML=''; av.textContent=ch; } }
+E('emCancel').addEventListener('click',()=>E('editModal').classList.remove('on'));
+E('emAvBtn').addEventListener('click',()=>E('emAvFile').click());
+E('emAvFile').addEventListener('change',function(e){ let f=e.target.files[0]; if(!f)return; if(f.size>1048576){toast('头像不能超过1MB，请到 docsmall.com/image-compress 压缩后重试');return;} let r=new FileReader(); r.onload=ev=>{newAvatar=ev.target.result;updateEmAv();}; r.readAsDataURL(f); e.target.value=''; });
+E('editModal').addEventListener('click',function(e){ if(e.target===this)this.classList.remove('on'); });
+E('emSave').addEventListener('click',async function(){
+  let nn=E('emName').value.trim(), bio=E('emBio').value.trim(); if(!nn){ toast('昵称不能为空'); return; }
+  try {
+    if(sbOK){ await sb.from('users').update({nickname:nn,bio:bio,avatar:newAvatar||''}).eq('id',user.id); }
+    user.nickname=nn; user.bio=bio; user.avatar=newAvatar||'';
+    if(!sbOK){ let us=L('users')||[], idx=us.findIndex(u=>u.id===user.id); if(idx>=0){us[idx].nickname=nn;us[idx].bio=bio;us[idx].avatar=newAvatar||'';S('users',us);} S('user',user); }
+    E('editModal').classList.remove('on'); rdPf(); updUI(); toast('保存成功');
+  } catch(e){ toast('保存失败'); }
+});
+
+/* ---- MY POSTS ---- */
+async function ldMy(){
+  if(!user)return;
+  E('myList').innerHTML='<div class="spin-w"><div class="spin"></div></div>';
+  let ps=[]; if(sbOK){ let r=await sb.from('posts').select('*,users!inner(nickname,avatar)').eq('user_id',user.id).order('created_at',{ascending:false}); if(r.error){E('myList').innerHTML='<div class="empty"><p>加载失败</p></div>';return;} ps=r.data||[]; }
+  else { ps=(L('posts')||[]).filter(p=>p.user_id===user.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)); }
+  renderCards(E('myList'),ps,true);
+}
+async function delPost(pid){
+  if(!confirm('确定删除这条帖子吗？'))return;
+  try { if(sbOK){ await sb.from('posts').delete().eq('id',pid); } else { S('posts',(L('posts')||[]).filter(p=>p.id!==pid)); S('comments',(L('comments')||[]).filter(c=>c.post_id!==pid)); S('likes',(L('likes')||[]).filter(l=>l.post_id!==pid)); } toast('已删除'); ldMy(); }
+  catch(e){ toast('删除失败'); }
+}
+
+/* ---- SIDEBAR & TABS ---- */
+document.querySelectorAll('.sb-item').forEach(x=>{ x.addEventListener('click',function(){ go(this.dataset.pg); }); });
+E('sbPublish').addEventListener('click',()=>go('publish'));
+E('sbAnnounce').addEventListener('click',()=>{ if(!user){showLogin();return;} E('annText').value=L('announce_content')||''; E('annModal2').classList.add('on'); });
+document.querySelectorAll('.mtab').forEach(x=>{ x.addEventListener('click',function(){ go(this.dataset.pg); }); });
+E('tbUser').addEventListener('click',()=>go('profile'));
+
+/* ---- ANNOUNCEMENT ---- */
+function showAnnBar(){
+  let a=L('announce_content');
+  if(a){
+    E('annBar').querySelector('span:not(.ann-tag):not(.ann-close)').textContent=a;
+    E('annBar').style.display='flex';
+  }
+}
+E('annClose').addEventListener('click',()=>{ E('annBar').style.display='none'; });
+
+/* Announcement Modal */
+E('annCancel2').addEventListener('click',()=>{ E('annModal2').classList.remove('on'); });
+E('annModal2').addEventListener('click',function(e){ if(e.target===this)this.classList.remove('on'); });
+E('annSave').addEventListener('click',function(){
+  let t=E('annText').value.trim();
+  if(!t){ toast('请输入公告内容'); return; }
+  S('announce_content',t);
+  E('annModal2').classList.remove('on');
+  showAnnBar();
+  toast('公告已发布');
+});
+
+/* ---- INIT ---- */
+async function init(){
+  rdPimgs(); updUI();
+  user=L('user');
+  if(user&&user.id==='admin'){ updUI(); ldFeed(); showAnnBar(); return; }
+  user=null; S('user',null); go('login');
+}
+window.addEventListener('resize',updUI);
+init();
+})();
+</script>
+</body>
+</html>
